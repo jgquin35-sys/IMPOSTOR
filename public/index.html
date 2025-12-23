@@ -12,7 +12,7 @@
     .btn{background:#f59e0b;color:#000;border:none;padding:15px 30px;
          font-size:18px;border-radius:10px;cursor:pointer;width:100%;margin:10px 0}
     .btn.secondary{background:#1e293b;color:#e5e7eb;border:1px solid #475569}
-    .input{width:100%;padding:15px;border:1px solid #475569;border-radius:10px;
+    .input,select{width:100%;padding:15px;border:1px solid #475569;border-radius:10px;
            background:#1e293b;color:#e5e7eb;font-size:16px;box-sizing:border-box;margin:8px 0}
     .codigo{display:flex;justify-content:center;font-size:26px;
             font-weight:bold;color:#fbbf24;margin:20px 0}
@@ -22,6 +22,7 @@
                 background:#1e293b;border-radius:15px;margin:20px 0}
     #impostor-msg{text-align:center;margin-top:10px}
     .app{max-width:480px;margin:0 auto}
+    small{color:#9ca3af}
   </style>
 </head>
 <body>
@@ -30,43 +31,73 @@
   <!-- HOME -->
   <section id="screen-home" class="screen active">
     <h1>🎮 Impostor de Palabras</h1>
-    <p>Crea una partida, comparte el código y cada jugador recibirá su palabra en secreto.</p>
+    <p>Uno crea la sala, elige cómo se decide la palabra y los demás se unen con un código.</p>
 
     <input id="nombre" class="input" placeholder="Tu nombre (ej: Ana)">
-    <button class="btn" onclick="crearPartida()">Crear partida</button>
+    <button class="btn" onclick="irConfigurar()">Crear partida</button>
 
-    <input id="codigo" class="input" placeholder="Código de partida">
-    <button class="btn secondary" onclick="unirsePartida()">Unirse a partida</button>
+    <hr style="margin:20px 0;border-color:#1e293b">
+
+    <h3>Unirse a partida</h3>
+    <input id="codigo-join" class="input" placeholder="Código de partida">
+    <button class="btn secondary" onclick="unirse()">Unirse</button>
   </section>
 
-  <!-- CREAR -->
-  <section id="screen-crear" class="screen">
-    <h2>Partida creada</h2>
-    <p>Comparte este código con tus amigos:</p>
-    <div id="codigo-generado" class="codigo"></div>
+  <!-- CONFIGURAR PARTIDA (HOST) -->
+  <section id="screen-config" class="screen">
+    <h2>Configurar partida</h2>
+    <p><strong>Host:</strong> <span id="host-name-label"></span></p>
 
-    <label>Palabra secreta</label>
-    <input id="palabra-secreta" class="input" placeholder="Ej: PIZZA">
-    <button class="btn" onclick="confirmarPalabra()">Confirmar palabra</button>
+    <h3>Elige cómo se decide la palabra</h3>
 
-    <p>Cuando tus amigos se unan, el sistema elegirá un impostor y repartirá palabras.</p>
-    <button class="btn secondary" onclick="volverHome()">Volver</button>
+    <button class="btn" onclick="modoManual()">Escribir mi palabra</button>
+    <button class="btn" onclick="modoRandom()">Palabra aleatoria (todas las categorías)</button>
+
+    <select id="categoria-select">
+      <option value="">Elige categoría...</option>
+      <option value="animales">Animales sencillos</option>
+      <option value="cuerpo">Partes del cuerpo</option>
+      <option value="paises">Países sencillos</option>
+      <option value="utensilios">Utensilios</option>
+      <option value="colores">Colores</option>
+      <option value="deportes">Deportes</option>
+      <option value="personajes">Personajes españoles muy famosos</option>
+    </select>
+    <button class="btn secondary" onclick="modoRandomCategoria()">Palabra aleatoria por categoría</button>
+
+    <div id="manual-word-block" style="display:none;margin-top:10px;">
+      <label>Escribe la palabra secreta (tú no podrás ser el impostor)</label>
+      <input id="palabra-manual" class="input" placeholder="Ej: PIZZA">
+      <button class="btn" onclick="confirmarConfigManual()">Confirmar y crear sala</button>
+    </div>
+
+    <p id="config-info"></p>
+    <button class="btn secondary" onclick="volverHome()">Cancelar</button>
   </section>
 
-  <!-- ESPERA -->
-  <section id="screen-espera" class="screen">
+  <!-- SALA / ESPERA -->
+  <section id="screen-sala" class="screen">
     <h2>Sala: <span id="codigo-sala"></span></h2>
+    <p><strong>Modo:</strong> <span id="modo-label"></span></p>
+    <p><strong>Categoría:</strong> <span id="categoria-label"></span></p>
+
     <h3>Jugadores conectados</h3>
     <ul id="lista-jugadores" class="jugadores"></ul>
-    <p>Espera a que se conecten todos. Cuando haya mínimo 3, se repartirá una palabra a cada uno.</p>
+    <small>Se necesitan al menos 3 jugadores para iniciar la ronda.</small>
+
+    <button class="btn" id="btn-iniciar" onclick="iniciarRonda()" style="margin-top:15px;">Iniciar ronda</button>
+    <button class="btn secondary" onclick="volverHome()">Salir</button>
   </section>
 
-  <!-- PALABRA -->
-  <section id="screen-palabra" class="screen">
+  <!-- ROL / PALABRA -->
+  <section id="screen-rol" class="screen">
     <h2>Tu palabra secreta</h2>
     <div id="mi-palabra"></div>
     <p id="impostor-msg"></p>
-    <button class="btn secondary" onclick="volverHome()">Nueva partida</button>
+    <p id="modo-detalle"></p>
+
+    <button class="btn" onclick="nuevaRonda()">Nueva partida con los mismos jugadores</button>
+    <button class="btn secondary" onclick="volverHome()">Salir al inicio</button>
   </section>
 
 </div>
@@ -75,75 +106,199 @@
 <script>
   const socket = io();
   let codigoActual = '';
-  let palabraLista = false;
+  let soyHost = false;
+  let modoActual = null; // 'manual' | 'random' | 'randomCategoria'
+  let categoriaActual = null;
 
   function mostrarPantalla(id){
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
   }
 
-  function crearPartida(){
+  function irConfigurar(){
     const nombre = document.getElementById('nombre').value.trim();
     if(!nombre){ alert('Escribe tu nombre'); return; }
-    socket.emit('crear-partida', { nombre, palabra: '' });
+    soyHost = true;
+    document.getElementById('host-name-label').textContent = nombre;
+    document.getElementById('config-info').textContent = '';
+    document.getElementById('manual-word-block').style.display = 'none';
+    document.getElementById('palabra-manual').value = '';
+    document.getElementById('categoria-select').value = '';
+    mostrarPantalla('screen-config');
   }
 
-  function confirmarPalabra(){
-    const palabra = document.getElementById('palabra-secreta').value.trim().toUpperCase();
-    if(!palabra){ alert('Escribe una palabra secreta'); return; }
-    palabraLista = true;
-    // reutilizamos el evento de unión para forzar el reparto cuando haya jugadores suficientes
-    // el servidor ya tiene almacenada la palabra en rooms[codigo].palabraSecreta
-    socket.emit('crear-partida', { nombre: 'HOST', palabra });
-    alert('Palabra guardada. Tus amigos pueden unirse con el código.');
+  function modoManual(){
+    modoActual = 'manual';
+    categoriaActual = null;
+    document.getElementById('config-info').textContent =
+      'Modo manual: tú escribes la palabra y nunca podrás ser el impostor.';
+    document.getElementById('manual-word-block').style.display = 'block';
   }
 
-  function unirsePartida(){
+  function confirmarConfigManual(){
     const nombre = document.getElementById('nombre').value.trim();
-    const codigo = document.getElementById('codigo').value.trim().toUpperCase();
-    if(!nombre || !codigo){ alert('Pon tu nombre y el código'); return; }
+    const palabra = document.getElementById('palabra-manual').value.trim().toUpperCase();
+    if(!palabra){ alert('Escribe una palabra'); return; }
+    socket.emit('configurar-partida', {
+      nombreHost: nombre,
+      modo: 'manual',
+      categoria: null,
+      palabraManual: palabra
+    });
+  }
+
+  function modoRandom(){
+    const nombre = document.getElementById('nombre').value.trim();
+    modoActual = 'random';
+    categoriaActual = null;
+    document.getElementById('config-info').textContent =
+      'Palabra aleatoria de todas las categorías. Tú puedes ser impostor.';
+    document.getElementById('manual-word-block').style.display = 'none';
+
+    socket.emit('configurar-partida', {
+      nombreHost: nombre,
+      modo: 'random',
+      categoria: null,
+      palabraManual: null
+    });
+  }
+
+  function modoRandomCategoria(){
+    const nombre = document.getElementById('nombre').value.trim();
+    const cat = document.getElementById('categoria-select').value;
+    if(!cat){
+      alert('Elige una categoría');
+      return;
+    }
+    modoActual = 'randomCategoria';
+    categoriaActual = cat;
+    document.getElementById('config-info').textContent =
+      'Palabra aleatoria dentro de la categoría seleccionada. Tú puedes ser impostor.';
+    document.getElementById('manual-word-block').style.display = 'none';
+
+    socket.emit('configurar-partida', {
+      nombreHost: nombre,
+      modo: 'randomCategoria',
+      categoria: cat,
+      palabraManual: null
+    });
+  }
+
+  // Unirse como jugador
+  function unirse(){
+    const nombre = document.getElementById('nombre').value.trim();
+    const codigo = document.getElementById('codigo-join').value.trim().toUpperCase();
+    if(!nombre || !codigo){
+      alert('Escribe tu nombre y el código de sala');
+      return;
+    }
+    soyHost = false;
     codigoActual = codigo;
     socket.emit('unirse-partida', { codigo, nombre });
+  }
+
+  function iniciarRonda(){
+    if(!codigoActual) return;
+    socket.emit('iniciar-ronda', codigoActual);
+  }
+
+  function nuevaRonda(){
+    if(!codigoActual) return;
+    socket.emit('nueva-ronda', codigoActual);
   }
 
   function volverHome(){
     location.href = '/';
   }
 
-  // Eventos desde el servidor
-  socket.on('partida-creada', (codigo) => {
-    codigoActual = codigo;
-    document.getElementById('codigo-generado').textContent = codigo;
-    document.getElementById('codigo-sala').textContent = codigo;
-    mostrarPantalla('screen-crear');
+  // --- SOCKET EVENTS ---
+
+  // Sala configurada por el host
+  socket.on('partida-configurada', (data) => {
+    codigoActual = data.codigo;
+    modoActual = data.modo;
+    categoriaActual = data.categoria;
+
+    document.getElementById('codigo-sala').textContent = data.codigo;
+    document.getElementById('modo-label').textContent =
+      data.modo === 'manual' ? 'Palabra manual (host no es impostor)'
+      : data.modo === 'random' ? 'Palabra aleatoria (todas)'
+      : 'Palabra aleatoria por categoría';
+
+    document.getElementById('categoria-label').textContent =
+      data.categoria ? data.categoria : '—';
+
+    mostrarPantalla('screen-sala');
   });
 
-  socket.on('jugador-unido', (jugadores) => {
-    document.getElementById('codigo-sala').textContent = codigoActual;
+  // Lista de jugadores de la sala
+  socket.on('jugadores-actualizados', (jugadores) => {
     const lista = document.getElementById('lista-jugadores');
     lista.innerHTML = '';
     jugadores.forEach(j => {
       const li = document.createElement('li');
       li.className = 'jugador';
-      li.textContent = j.nombre;
+      li.textContent = j.nombre + (j.esHost ? ' (host)' : '');
       lista.appendChild(li);
     });
-    mostrarPantalla('screen-espera');
   });
 
-  socket.on('tu-palabra', (data) => {
+  // Errores
+  socket.on('error-unirse', (msg) => {
+    alert(msg);
+  });
+
+  socket.on('error-ronda', (msg) => {
+    alert(msg);
+  });
+
+  // Cuando recibimos nuestro rol y palabra
+  socket.on('tu-rol', (data) => {
     document.getElementById('mi-palabra').textContent = data.palabra;
+
     if(data.impostor){
       document.getElementById('impostor-msg').innerHTML =
-        '🕵️ <strong>¡ERES EL IMPOSTOR!</strong> Escucha las pistas y intenta adivinar la palabra.';
+        '🕵️ <strong>¡ERES EL IMPOSTOR!</strong> Escucha las pistas y trata de adivinar la palabra.';
     }else{
       document.getElementById('impostor-msg').textContent =
-        'Da pistas sin decir la palabra exacta. Intentad detectar al impostor.';
+        'Da pistas sin decir la palabra exacta. Intentad descubrir quién es el impostor.';
     }
-    mostrarPantalla('screen-palabra');
+
+    let detalle = '';
+    if(data.modo === 'manual'){
+      detalle = 'Modo: palabra escrita por el host.';
+    }else if(data.modo === 'random'){
+      detalle = 'Modo: palabra aleatoria de todas las categorías.';
+    }else if(data.modo === 'randomCategoria'){
+      detalle = 'Modo: palabra aleatoria dentro de la categoría seleccionada.';
+    }
+    if(data.categoria){
+      detalle += ' Categoría: ' + data.categoria.toUpperCase();
+    }
+    document.getElementById('modo-detalle').textContent = detalle;
+
+    mostrarPantalla('screen-rol');
+  });
+
+  // Nueva palabra generada para nueva ronda (random / randomCategoria)
+  socket.on('nueva-palabra-generada', (data) => {
+    // En el cliente solo necesitamos llamar a iniciarRonda de nuevo
+    if(codigoActual === data.codigo){
+      iniciarRonda();
+    }
+  });
+
+  // Host debe escribir nueva palabra manual
+  socket.on('solicitar-nueva-palabra-manual', (data) => {
+    if(!soyHost) return;
+    const nueva = prompt('Nueva palabra secreta para la siguiente ronda:');
+    if(!nueva) return;
+    socket.emit('nueva-palabra-manual', { codigo: data.codigo, palabra: nueva });
   });
 </script>
 </body>
 </html>
+
+
 
 
