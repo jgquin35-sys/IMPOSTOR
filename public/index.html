@@ -12,6 +12,138 @@
     .btn{background:#f59e0b;color:#000;border:none;padding:15px 30px;
          font-size:18px;border-radius:10px;cursor:pointer;width:100%;margin:10px 0}
     .btn.secondary{background:#1e293b;color:#e5e7eb;border:1px solid #475569}
-    .input{width
+    .input{width:100%;padding:15px;border:1px solid #475569;border-radius:10px;
+           background:#1e293b;color:#e5e7eb;font-size:16px;box-sizing:border-box;margin:8px 0}
+    .codigo{display:flex;justify-content:center;font-size:26px;
+            font-weight:bold;color:#fbbf24;margin:20px 0}
+    .jugadores{list-style:none;padding:0;margin:0}
+    .jugador{padding:10px;background:#1e293b;margin:5px 0;border-radius:6px}
+    #mi-palabra{font-size:40px;text-align:center;padding:40px;
+                background:#1e293b;border-radius:15px;margin:20px 0}
+    #impostor-msg{text-align:center;margin-top:10px}
+    .app{max-width:480px;margin:0 auto}
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HOME -->
+  <section id="screen-home" class="screen active">
+    <h1>🎮 Impostor de Palabras</h1>
+    <p>Crea una partida, comparte el código y cada jugador recibirá su palabra en secreto.</p>
+
+    <input id="nombre" class="input" placeholder="Tu nombre (ej: Ana)">
+    <button class="btn" onclick="crearPartida()">Crear partida</button>
+
+    <input id="codigo" class="input" placeholder="Código de partida">
+    <button class="btn secondary" onclick="unirsePartida()">Unirse a partida</button>
+  </section>
+
+  <!-- CREAR -->
+  <section id="screen-crear" class="screen">
+    <h2>Partida creada</h2>
+    <p>Comparte este código con tus amigos:</p>
+    <div id="codigo-generado" class="codigo"></div>
+
+    <label>Palabra secreta</label>
+    <input id="palabra-secreta" class="input" placeholder="Ej: PIZZA">
+    <button class="btn" onclick="confirmarPalabra()">Confirmar palabra</button>
+
+    <p>Cuando tus amigos se unan, el sistema elegirá un impostor y repartirá palabras.</p>
+    <button class="btn secondary" onclick="volverHome()">Volver</button>
+  </section>
+
+  <!-- ESPERA -->
+  <section id="screen-espera" class="screen">
+    <h2>Sala: <span id="codigo-sala"></span></h2>
+    <h3>Jugadores conectados</h3>
+    <ul id="lista-jugadores" class="jugadores"></ul>
+    <p>Espera a que se conecten todos. Cuando haya mínimo 3, se repartirá una palabra a cada uno.</p>
+  </section>
+
+  <!-- PALABRA -->
+  <section id="screen-palabra" class="screen">
+    <h2>Tu palabra secreta</h2>
+    <div id="mi-palabra"></div>
+    <p id="impostor-msg"></p>
+    <button class="btn secondary" onclick="volverHome()">Nueva partida</button>
+  </section>
+
+</div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+  const socket = io();
+  let codigoActual = '';
+  let palabraLista = false;
+
+  function mostrarPantalla(id){
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  function crearPartida(){
+    const nombre = document.getElementById('nombre').value.trim();
+    if(!nombre){ alert('Escribe tu nombre'); return; }
+    socket.emit('crear-partida', { nombre, palabra: '' });
+  }
+
+  function confirmarPalabra(){
+    const palabra = document.getElementById('palabra-secreta').value.trim().toUpperCase();
+    if(!palabra){ alert('Escribe una palabra secreta'); return; }
+    palabraLista = true;
+    // reutilizamos el evento de unión para forzar el reparto cuando haya jugadores suficientes
+    // el servidor ya tiene almacenada la palabra en rooms[codigo].palabraSecreta
+    socket.emit('crear-partida', { nombre: 'HOST', palabra });
+    alert('Palabra guardada. Tus amigos pueden unirse con el código.');
+  }
+
+  function unirsePartida(){
+    const nombre = document.getElementById('nombre').value.trim();
+    const codigo = document.getElementById('codigo').value.trim().toUpperCase();
+    if(!nombre || !codigo){ alert('Pon tu nombre y el código'); return; }
+    codigoActual = codigo;
+    socket.emit('unirse-partida', { codigo, nombre });
+  }
+
+  function volverHome(){
+    location.href = '/';
+  }
+
+  // Eventos desde el servidor
+  socket.on('partida-creada', (codigo) => {
+    codigoActual = codigo;
+    document.getElementById('codigo-generado').textContent = codigo;
+    document.getElementById('codigo-sala').textContent = codigo;
+    mostrarPantalla('screen-crear');
+  });
+
+  socket.on('jugador-unido', (jugadores) => {
+    document.getElementById('codigo-sala').textContent = codigoActual;
+    const lista = document.getElementById('lista-jugadores');
+    lista.innerHTML = '';
+    jugadores.forEach(j => {
+      const li = document.createElement('li');
+      li.className = 'jugador';
+      li.textContent = j.nombre;
+      lista.appendChild(li);
+    });
+    mostrarPantalla('screen-espera');
+  });
+
+  socket.on('tu-palabra', (data) => {
+    document.getElementById('mi-palabra').textContent = data.palabra;
+    if(data.impostor){
+      document.getElementById('impostor-msg').innerHTML =
+        '🕵️ <strong>¡ERES EL IMPOSTOR!</strong> Escucha las pistas y intenta adivinar la palabra.';
+    }else{
+      document.getElementById('impostor-msg').textContent =
+        'Da pistas sin decir la palabra exacta. Intentad detectar al impostor.';
+    }
+    mostrarPantalla('screen-palabra');
+  });
+</script>
+</body>
+</html>
 
 
