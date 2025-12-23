@@ -8,15 +8,62 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.static('public'));
 
-// Listas de palabras por categoría (por ahora cortas, las ampliaréis luego)
+// Listas de palabras por categoría (todas en mayúsculas para que sea más fácil)
 const palabras = {
-  animales: ['PERRO','GATO','LEON','TIGRE','VACA','CABALLO','RATON','PATO','OVEJA','MONO'],
-  cuerpo: ['MANO','PIE','CABEZA','BRAZO','PIERNA','OJO','BOCA','NARIZ','ESPALDA','RODILLA'],
-  paises: ['ESPAÑA','FRANCIA','ITALIA','PORTUGAL','MEXICO','ARGENTINA','ALEMANIA','JAPON','CHINA','BRASIL'],
-  utensilios: ['CUCHARA','TENEDOR','CUCHILLO','PLATO','VASO','SARTEN','CAZO','TIJERAS','LAPIZ','BOLIGRAFO'],
-  colores: ['ROJO','AZUL','VERDE','AMARILLO','NEGRO','BLANCO','ROSA','NARANJA','MORADO','MARRON'],
-  deportes: ['FUTBOL','BALONCESTO','TENIS','PADEL','NATACION','CICLISMO','BALONMANO','GOLF','VOLEIBOL','ATLETISMO'],
-  personajes: ['RAFA NADAL','FERNANDO ALONSO','PENÉLOPE CRUZ','ANTONIO BANDERAS','SHAKIRA','JULIO IGLESIAS','SERGIO RAMOS','ROSALIA','PAU GASOL','SALVADOR DALI']
+  animales: [
+    'PERRO','GATO','LEON','TIGRE','VACA','CABALLO','RATON','PATO','OVEJA','MONO',
+    'CERDO','BURRO','LOBO','ZORRO','POLLO','GALLO','CONEJO','CABRA','DELFIN','PINGÜINO'
+  ],
+  cuerpo: [
+    'MANO','PIE','CABEZA','BRAZO','PIERNA','OJO','BOCA','NARIZ','ESPALDA','RODILLA',
+    'HOMBRO','CODO','DEDOS','PELO','DIENTE'
+  ],
+  paises: [
+    'ESPAÑA','FRANCIA','ITALIA','PORTUGAL','MEXICO','ARGENTINA','ALEMANIA','JAPON','CHINA','BRASIL',
+    'CANADA','CHILE','PERU','COLOMBIA','ESTADOS UNIDOS','INGLATERRA'
+  ],
+  utensilios: [
+    'CUCHARA','TENEDOR','CUCHILLO','PLATO','VASO','SARTEN','CAZO','TIJERAS','LAPIZ','BOLIGRAFO',
+    'LIBRO','RELOJ','MANTA','MOCHILA','CEPILLO','PEINE'
+  ],
+  colores: [
+    'ROJO','AZUL','VERDE','AMARILLO','NEGRO','BLANCO','ROSA','NARANJA','MORADO','MARRON',
+    'GRIS','CELESTE','DORADO','PLATEADO'
+  ],
+  deportes: [
+    'FUTBOL','BALONCESTO','TENIS','PADEL','NATACION','CICLISMO','BALONMANO','GOLF','VOLEIBOL','ATLETISMO',
+    'PING PONG','RUGBY','SURF','ESQUI','BOXEO'
+  ],
+  personajes: [
+    'RAFA NADAL','FERNANDO ALONSO','PENÉLOPE CRUZ','ANTONIO BANDERAS','SHAKIRA','JULIO IGLESIAS',
+    'SERGIO RAMOS','ROSALIA','PAU GASOL','SALVADOR DALI','PABLO PICASSO','LOLA FLORES','AMELIA MOLERO'
+  ],
+  comidas: [
+    'PIZZA','HAMBURGUESA','PASTA','ENSALADA','SOPA','TORTILLA','PAELLA','SANDWICH','ARROZ','POLLO ASADO',
+    'CROQUETAS','LENTEJAS','MACARRONES','TARTA','HELADO'
+  ],
+  trabajos: [
+    'MEDICO','PROFESOR','ABOGADO','INGENIERO','CAMARERO','COCINERO','POLICIA','BOMBERO','ENFERMERO','ELECTRICISTA',
+    'CARPINTERO','MECANICO','INFORMATICO','PANADERO','PINTOR'
+  ],
+  ropa: [
+    'CAMISETA','PANTALON','VESTIDO','FALDA','CHAQUETA','ABRIGO','ZAPATOS','TENIS','CALCETINES','GORRA',
+    'BUFANDA','GUANTES','PIJAMA','TRAJE','BIKINI'
+  ],
+  clima: [
+    'LLUVIA','NIEVE','TORMENTA','VIENTO','SOL','NIEBLA','GRANIZO','ARCOIRIS','NUBE','HURACAN'
+  ],
+  animales_magicos: [
+    'DRAGON','UNICORNIO','FENIX','PEGASO','SIRENA','HADA','ELFO','GNOMO','MINOTAURO','GRIFO'
+  ],
+  frutas: [
+    'MANZANA','PLATANO','PERA','NARANJA','KIWI','FRESA','MELON','SANDIA','MANGO','UVA',
+    'PIÑA','LIMON','CEREZA','MELOCOTON','COCO'
+  ],
+  marcas: [
+    'COCA COLA','PEPSI','NIKE','ADIDAS','ZARA','MERCEDES','BMW','APPLE','SAMSUNG','SONY',
+    'McDONALDS','BURGER KING','AMAZON','GOOGLE','DISNEY'
+  ]
 };
 
 function palabraAleatoriaGlobal() {
@@ -192,7 +239,6 @@ io.on('connection', (socket) => {
       } else if (s.modo === 'randomCategoria') {
         s.palabraSecreta = palabraAleatoriaCategoria(s.categoria);
       }
-      // En manual mantenemos la palabra hasta que decidáis cambiarlo en el futuro
 
       io.to(codigo).emit('jugadores-actualizados', s.jugadores);
       io.to(codigo).emit('estado-espera', 'Esperando a todos los jugadores...');
@@ -236,5 +282,7 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Servidor escuchando en el puerto ${PORT}`);
 });
+
+
 
 
