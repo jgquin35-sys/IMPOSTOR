@@ -8,7 +8,7 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.static('public'));
 
-// Listas de palabras por categoría (todas en mayúsculas para que sea más fácil)
+// Listas de palabras por categoría
 const palabras = {
   animales: [
     'PERRO','GATO','LEON','TIGRE','VACA','CABALLO','RATON','PATO','OVEJA','MONO',
@@ -84,7 +84,6 @@ io.on('connection', (socket) => {
 
   // HOST configura partida y crea sala
   socket.on('configurar-partida', (data) => {
-    // data: { nombreHost, modo, categoria, palabraManual }
     const codigo = Math.random().toString(36).substring(2, 8).toUpperCase();
 
     let palabraSecreta = '';
@@ -106,7 +105,7 @@ io.on('connection', (socket) => {
       idHost: socket.id,
       nombreHost: data.nombreHost,
       esperandoConfirmacion: false,
-      confirmaciones: {} // { socketId: 'acepta' | 'rechaza' | 'pendiente' }
+      confirmaciones: {}
     };
 
     rooms[codigo].jugadores.push({
@@ -125,7 +124,7 @@ io.on('connection', (socket) => {
     io.to(codigo).emit('jugadores-actualizados', rooms[codigo].jugadores);
   });
 
-  // Jugador se une a una sala ya configurada
+  // Jugador se une
   socket.on('unirse-partida', (data) => {
     const sala = rooms[data.codigo];
     if (!sala || !sala.palabraSecreta) {
@@ -133,14 +132,12 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Evitar que el mismo socket se una dos veces
     const yaDentroPorId = sala.jugadores.some(j => j.id === socket.id);
     if (yaDentroPorId) {
       socket.emit('error-unirse', 'Ya estás unido a esta partida.');
       return;
     }
 
-    // Evitar nombres duplicados en la misma sala
     const nombre = (data.nombre || '').trim();
     const nombreOcupado = sala.jugadores.some(
       j => j.nombre.toLowerCase() === nombre.toLowerCase()
@@ -155,7 +152,7 @@ io.on('connection', (socket) => {
     io.to(data.codigo).emit('jugadores-actualizados', sala.jugadores);
   });
 
-  // Iniciar ronda (host)
+  // Iniciar ronda
   socket.on('iniciar-ronda', (codigo) => {
     const sala = rooms[codigo];
     if (!sala) return;
@@ -187,7 +184,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  // NUEVA PARTIDA con cuenta atrás y confirmación
+  // Nueva partida con cuenta atrás
   socket.on('solicitar-nueva-partida', (codigo) => {
     const sala = rooms[codigo];
     if (!sala) return;
@@ -199,22 +196,17 @@ io.on('connection', (socket) => {
       sala.confirmaciones[j.id] = 'pendiente';
     });
 
-    io.to(codigo).emit('nueva-partida-pedida', {
-      codigo,
-      segundos: 10
-    });
+    io.to(codigo).emit('nueva-partida-pedida', { codigo, segundos: 10 });
 
     setTimeout(() => {
       const s = rooms[codigo];
       if (!s) return;
 
-      // filtrar aceptados
       s.jugadores = s.jugadores.filter(j => {
         const estado = s.confirmaciones[j.id];
         return estado === 'acepta';
       });
 
-      // expulsar al resto
       Object.entries(s.confirmaciones).forEach(([id, estado]) => {
         if (estado !== 'acepta') {
           const sock = io.sockets.sockets.get(id);
@@ -233,7 +225,6 @@ io.on('connection', (socket) => {
         return;
       }
 
-      // Si el modo era aleatorio, generamos nueva palabra
       if (s.modo === 'random') {
         s.palabraSecreta = palabraAleatoriaGlobal();
       } else if (s.modo === 'randomCategoria') {
@@ -251,18 +242,6 @@ io.on('connection', (socket) => {
     if (!sala || !sala.esperandoConfirmacion) return;
     if (!(socket.id in sala.confirmaciones)) return;
     sala.confirmaciones[socket.id] = data.acepta ? 'acepta' : 'rechaza';
-  });
-
-  socket.on('nueva-palabra-manual', (data) => {
-    const sala = rooms[data.codigo];
-    if (!sala) return;
-    sala.palabraSecreta = (data.palabra || '').toUpperCase();
-    io.to(data.codigo).emit('nueva-palabra-generada', {
-      codigo: data.codigo,
-      palabraSecreta: sala.palabraSecreta,
-      modo: sala.modo,
-      categoria: sala.categoria
-    });
   });
 
   socket.on('disconnect', () => {
