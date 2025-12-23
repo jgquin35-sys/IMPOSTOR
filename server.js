@@ -30,11 +30,12 @@ function palabraAleatoriaCategoria(cat) {
   return lista[Math.floor(Math.random() * lista.length)];
 }
 
-// rooms[codigo] = { jugadores: [{id,nombre,esHost}], palabraSecreta, impostorId, modo, categoria, hostNoImpostor }
+// rooms[codigo] = { jugadores, palabraSecreta, impostorId, modo, categoria, hostNoImpostor, idHost, nombreHost, esperandoConfirmacion, confirmaciones }
 const rooms = {};
 
 io.on('connection', (socket) => {
-  // Host crea la sala con configuración, pero sin jugadores aún
+
+  // HOST configura partida y crea sala
   socket.on('configurar-partida', (data) => {
     // data: { nombreHost, modo, categoria, palabraManual }
     const codigo = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -56,10 +57,11 @@ io.on('connection', (socket) => {
       categoria: data.categoria || null,
       hostNoImpostor: data.modo === 'manual',
       idHost: socket.id,
-      nombreHost: data.nombreHost
+      nombreHost: data.nombreHost,
+      esperandoConfirmacion: false,
+      confirmaciones: {} // { socketId: 'acepta' | 'rechaza' | 'pendiente' }
     };
 
-    // El host entra como primer jugador
     rooms[codigo].jugadores.push({
       id: socket.id,
       nombre: data.nombreHost,
@@ -76,7 +78,7 @@ io.on('connection', (socket) => {
     io.to(codigo).emit('jugadores-actualizados', rooms[codigo].jugadores);
   });
 
-  // Jugadores se unen cuando ya hay palabra y sala creada
+  // Jugador se une a una sala ya configurada
   socket.on('unirse-partida', (data) => {
     const sala = rooms[data.codigo];
     if (!sala || !sala.palabraSecreta) {
@@ -88,7 +90,7 @@ io.on('connection', (socket) => {
     io.to(data.codigo).emit('jugadores-actualizados', sala.jugadores);
   });
 
-  // Host inicia ronda (o nueva ronda)
+  // Iniciar ronda (host)
   socket.on('iniciar-ronda', (codigo) => {
     const sala = rooms[codigo];
     if (!sala) return;
@@ -97,12 +99,10 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Elegir impostor
     const candidatos = sala.jugadores.filter(j => !(sala.hostNoImpostor && j.esHost));
     const impostor = candidatos[Math.floor(Math.random() * candidatos.length)];
     sala.impostorId = impostor.id;
 
-    // Enviar palabras
     sala.jugadores.forEach(jugador => {
       if (jugador.id === sala.impostorId) {
         io.to(jugador.id).emit('tu-rol', {
@@ -122,40 +122,77 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Nueva ronda (misma sala, mismo modo y categoría; nueva palabra si es aleatoria)
-  socket.on('nueva-ronda', (codigo) => {
+  // NUEVA RONDA (mismo modo/categoría, con confirmación de todos)
+  socket.on('solicitar-nueva-partida', (codigo) => {
     const sala = rooms[codigo];
     if (!sala) return;
+    if (sala.esperandoConfirmacion) return;
 
-    if (sala.modo === 'manual') {
-      // En modo manual pediremos nueva palabra al host desde el cliente
-      io.to(sala.idHost).emit('solicitar-nueva-palabra-manual', {
-        codigo,
-        modo: sala.modo,
-        categoria: sala.categoria
+    sala.esperandoConfirmacion = true;
+    sala.confirmaciones = {};
+    sala.jugadores.forEach(j => {
+      sala.confirmaciones[j.id] = 'pendiente';
+    });
+
+    io.to(codigo).emit('nueva-partida-pedida', {
+      codigo,
+      segundos: 10
+    });
+
+    // tras 10 segundos
+    setTimeout(() => {
+      const s = rooms[codigo];
+      if (!s) return;
+
+      // filtrar aceptados
+      s.jugadores = s.jugadores.filter(j => {
+        const estado = s.confirmaciones[j.id];
+        return estado === 'acepta';
       });
-    } else if (sala.modo === 'random') {
-      sala.palabraSecreta = palabraAleatoriaGlobal();
-      io.to(codigo).emit('nueva-palabra-generada', {
-        codigo,
-        palabraSecreta: sala.palabraSecreta,
-        modo: sala.modo,
-        categoria: sala.categoria
+
+      // expulsar al resto
+      Object.entries(s.confirmaciones).forEach(([id, estado]) => {
+        if (estado !== 'acepta') {
+          const sock = io.sockets.sockets.get(id);
+          if (sock) {
+            sock.leave(codigo);
+            sock.emit('expulsado', 'No aceptaste la nueva partida a tiempo.');
+          }
+        }
       });
-    } else if (sala.modo === 'randomCategoria') {
-      sala.palabraSecreta = palabraAleatoriaCategoria(sala.categoria);
-      io.to(codigo).emit('nueva-palabra-generada', {
-        codigo,
-        palabraSecreta: sala.palabraSecreta,
-        modo: sala.modo,
-        categoria: sala.categoria
-      });
-    }
+
+      s.esperandoConfirmacion = false;
+
+      if (s.jugadores.length < 3) {
+        io.to(codigo).emit('error-ronda', 'No hay suficientes jugadores para continuar.');
+        io.to(codigo).emit('jugadores-actualizados', s.jugadores);
+        return;
+      }
+
+      // Si el modo era aleatorio, generamos nueva palabra
+      if (s.modo === 'random') {
+        s.palabraSecreta = palabraAleatoriaGlobal();
+      } else if (s.modo === 'randomCategoria') {
+        s.palabraSecreta = palabraAleatoriaCategoria(s.categoria);
+      }
+      // En modo manual, mantenemos palabra hasta que host la cambie en el futuro si quieres.
+
+      io.to(codigo).emit('jugadores-actualizados', s.jugadores);
+      io.to(codigo).emit('estado-espera', 'Esperando a todos los jugadores...');
+      io.to(codigo).emit('listo-para-nueva-ronda', { codigo });
+    }, 10000);
   });
 
-  // Host envía nueva palabra manual para la nueva ronda
+  // Respuesta de cada jugador a la nueva partida
+  socket.on('respuesta-nueva-partida', (data) => {
+    const sala = rooms[data.codigo];
+    if (!sala || !sala.esperandoConfirmacion) return;
+    if (!(socket.id in sala.confirmaciones)) return;
+    sala.confirmaciones[socket.id] = data.acepta ? 'acepta' : 'rechaza';
+  });
+
+  // Nueva palabra manual (si quisieras usarla en el futuro)
   socket.on('nueva-palabra-manual', (data) => {
-    // data: { codigo, palabra }
     const sala = rooms[data.codigo];
     if (!sala) return;
     sala.palabraSecreta = (data.palabra || '').toUpperCase();
@@ -168,7 +205,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    // Limpieza sencilla: quitar jugadores de salas
     Object.keys(rooms).forEach(codigo => {
       const sala = rooms[codigo];
       sala.jugadores = sala.jugadores.filter(j => j.id !== socket.id);
@@ -185,3 +221,4 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Servidor escuchando en el puerto ${PORT}`);
 });
+
