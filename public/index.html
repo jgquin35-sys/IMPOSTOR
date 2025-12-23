@@ -62,6 +62,13 @@
       <option value="colores">Colores</option>
       <option value="deportes">Deportes</option>
       <option value="personajes">Personajes españoles muy famosos</option>
+      <option value="comidas">Comidas</option>
+      <option value="trabajos">Trabajos</option>
+      <option value="ropa">Prendas de ropa</option>
+      <option value="clima">Fenómenos meteorológicos</option>
+      <option value="animales_magicos">Animales mágicos</option>
+      <option value="frutas">Frutas</option>
+      <option value="marcas">Marcas conocidas</option>
     </select>
     <button class="btn secondary" onclick="modoRandomCategoria()">Palabra aleatoria por categoría</button>
 
@@ -72,7 +79,7 @@
     </div>
 
     <p id="config-info"></p>
-    <button class="btn secondary" onclick="volverHome()">Cancelar</button>
+    <button class="btn secondary" onclick="confirmarSalir()">Cancelar</button>
   </section>
 
   <!-- SALA / ESPERA -->
@@ -90,7 +97,7 @@
     </button>
     <small id="estado-espera-texto"></small>
 
-    <button class="btn secondary" onclick="volverHome()">Salir</button>
+    <button class="btn secondary" onclick="confirmarSalir()">Salir</button>
   </section>
 
   <!-- ROL / PALABRA -->
@@ -101,7 +108,7 @@
     <p id="modo-detalle"></p>
 
     <button class="btn" onclick="nuevaRonda()">Nueva partida con los mismos jugadores</button>
-    <button class="btn secondary" onclick="volverHome()">Salir al inicio</button>
+    <button class="btn secondary" onclick="confirmarSalir()">Salir al inicio</button>
   </section>
 
   <!-- MODAL NUEVA PARTIDA -->
@@ -236,6 +243,14 @@
 
   function volverHome(){
     location.href = '/';
+  }
+
+  function confirmarSalir(){
+    const seguro = confirm(
+      '¿Seguro que quieres abandonar la partida? Perderás tu sitio en esta sala.'
+    );
+    if (!seguro) return;
+    volverHome();
   }
 
   function mostrarModalNuevaPartida(segundos){
@@ -380,6 +395,7 @@
 </script>
 </body>
 </html>
+
 
 
 
