@@ -8,7 +8,7 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.static('public'));
 
-// Listas de palabras por categoría
+// Listas de palabras por categoría (por ahora cortas, las ampliaréis luego)
 const palabras = {
   animales: ['PERRO','GATO','LEON','TIGRE','VACA','CABALLO','RATON','PATO','OVEJA','MONO'],
   cuerpo: ['MANO','PIE','CABEZA','BRAZO','PIERNA','OJO','BOCA','NARIZ','ESPALDA','RODILLA'],
@@ -85,7 +85,25 @@ io.on('connection', (socket) => {
       socket.emit('error-unirse', 'La partida no está lista todavía.');
       return;
     }
-    sala.jugadores.push({ id: socket.id, nombre: data.nombre, esHost: false });
+
+    // Evitar que el mismo socket se una dos veces
+    const yaDentroPorId = sala.jugadores.some(j => j.id === socket.id);
+    if (yaDentroPorId) {
+      socket.emit('error-unirse', 'Ya estás unido a esta partida.');
+      return;
+    }
+
+    // Evitar nombres duplicados en la misma sala
+    const nombre = (data.nombre || '').trim();
+    const nombreOcupado = sala.jugadores.some(
+      j => j.nombre.toLowerCase() === nombre.toLowerCase()
+    );
+    if (nombreOcupado) {
+      socket.emit('error-unirse', 'Ese nombre ya está en uso en esta partida.');
+      return;
+    }
+
+    sala.jugadores.push({ id: socket.id, nombre, esHost: false });
     socket.join(data.codigo);
     io.to(data.codigo).emit('jugadores-actualizados', sala.jugadores);
   });
@@ -122,7 +140,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  // NUEVA RONDA (mismo modo/categoría, con confirmación de todos)
+  // NUEVA PARTIDA con cuenta atrás y confirmación
   socket.on('solicitar-nueva-partida', (codigo) => {
     const sala = rooms[codigo];
     if (!sala) return;
@@ -139,7 +157,6 @@ io.on('connection', (socket) => {
       segundos: 10
     });
 
-    // tras 10 segundos
     setTimeout(() => {
       const s = rooms[codigo];
       if (!s) return;
@@ -175,7 +192,7 @@ io.on('connection', (socket) => {
       } else if (s.modo === 'randomCategoria') {
         s.palabraSecreta = palabraAleatoriaCategoria(s.categoria);
       }
-      // En modo manual, mantenemos palabra hasta que host la cambie en el futuro si quieres.
+      // En manual mantenemos la palabra hasta que decidáis cambiarlo en el futuro
 
       io.to(codigo).emit('jugadores-actualizados', s.jugadores);
       io.to(codigo).emit('estado-espera', 'Esperando a todos los jugadores...');
@@ -183,7 +200,6 @@ io.on('connection', (socket) => {
     }, 10000);
   });
 
-  // Respuesta de cada jugador a la nueva partida
   socket.on('respuesta-nueva-partida', (data) => {
     const sala = rooms[data.codigo];
     if (!sala || !sala.esperandoConfirmacion) return;
@@ -191,7 +207,6 @@ io.on('connection', (socket) => {
     sala.confirmaciones[socket.id] = data.acepta ? 'acepta' : 'rechaza';
   });
 
-  // Nueva palabra manual (si quisieras usarla en el futuro)
   socket.on('nueva-palabra-manual', (data) => {
     const sala = rooms[data.codigo];
     if (!sala) return;
@@ -221,4 +236,5 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Servidor escuchando en el puerto ${PORT}`);
 });
+
 
